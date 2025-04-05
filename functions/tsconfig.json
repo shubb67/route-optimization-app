@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "esModuleInterop": true,
+    "moduleResolution": "nodenext",
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "outDir": ".",             // 👈 compile JS to root of /functions
+    "rootDir": ".",  
+    "sourceMap": true,
+    "strict": true,
+    "target": "es2017",
+  },
+  "compileOnSave": true,
+  "include": [ "index.ts" ],
+  "extends": "expo/tsconfig.base"
+}
