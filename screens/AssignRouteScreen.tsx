@@ -2,108 +2,150 @@ import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   ActivityIndicator,
-  Alert,
+  StyleSheet,
 } from 'react-native';
+import { collection, getDocs, query } from 'firebase/firestore';
 import { db } from '../firebaseconfig';
-import { collection, getDocs, updateDoc, doc, where, query } from 'firebase/firestore';
-import { Picker } from '@react-native-picker/picker';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 
-const AssignRoutesScreen = () => {
+// At the top of your component
+export default function RouteSummariesScreen() {
   const [routes, setRoutes] = useState<any[]>([]);
-  const [drivers, setDrivers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const fetchRoutes = async () => {
-    const routeSnap = await getDocs(collection(db, 'extractedRoutes'));
-    const unassigned = routeSnap.docs
-      .map(doc => ({ id: doc.id, ...doc.data() }))
-      .filter(route => !route.assignedTo);
-
-    setRoutes(unassigned);
-  };
-
-  const fetchDrivers = async () => {
-    const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'driver')));
-    const driverList = snap.docs.map(doc => doc.data().name);
-    setDrivers(driverList);
-  };
-
-  const assignRoute = async (routeId: string, driverName: string) => {
-    try {
-      const routeRef = doc(db, 'extractedRoutes', routeId);
-      await updateDoc(routeRef, { assignedTo: driverName });
-      Alert.alert('✅ Assigned', `Route assigned to ${driverName}`);
-      fetchRoutes(); // Refresh list
-    } catch (err) {
-      Alert.alert('Error', 'Failed to assign route');
-    }
-  };
-
+  
+  const navigation = useNavigation<any>();
   useEffect(() => {
-    (async () => {
-      await fetchDrivers();
-      await fetchRoutes();
-      setLoading(false);
-    })();
+    const fetchRoutes = async () => {
+      try {
+        const q = query(collection(db, 'routes'));
+        const snapshot = await getDocs(q);
+
+        const routeList = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        routeList.sort((a, b) =>
+          (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)
+        );
+
+        setRoutes(routeList);
+      } catch (error) {
+        console.error('Error fetching routes:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRoutes();
   }, []);
 
-  if (loading) return <ActivityIndicator style={{ marginTop: 40 }} />;
+  const renderItem = ({ item }: { item: any }) => (
+    <TouchableOpacity
+      onPress={() =>
+        navigation.navigate('RouteDetails', {
+          routeName: item.route,
+          routeId: item.id,
+          deliveries: item.deliveries,
+          numPackages: item.packageCount,
+        })
+      }
+      style={styles.card}
+    >
+      <View style={styles.headerRow}>
+        <Ionicons name="map-outline" size={22} color="#333" style={{ marginRight: 6 }} />
+        <Text style={styles.routeName}>{item.routeName || item.id}</Text>
+      </View>
+  
+      <Text style={styles.packageCount}>
+        📦 {item.numPackages} package{item.packageCount !== 1 ? 's' : ''}
+      </Text>
+  
+      {item.deliveries?.length > 0 && (
+        <View style={styles.preview}>
+          <Text style={styles.previewLabel}>🚚 Preview Deliveries:</Text>
+          {item.deliveries.slice(0, 3).map((delivery: any, index: number) => (
+            <Text key={index} style={styles.address}>
+              • {delivery.address}
+            </Text>
+          ))}
+        </View>
+      )}
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>📦 Unassigned Routes</Text>
-      {routes.length === 0 ? (
-        <Text style={styles.empty}>All routes are assigned 🎉</Text>
+      <Text style={styles.title}>📍 Parsed Route Summaries</Text>
+      {loading ? (
+        <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 30 }} />
       ) : (
         <FlatList
           data={routes}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <Text style={styles.routeId}>Route: {item.routeId}</Text>
-              <Text style={styles.meta}>Packages: {item.totalPackages}</Text>
-              <Text style={styles.meta}>Preview: {item.content.slice(0, 80)}...</Text>
-
-              <Picker
-                selectedValue={item.assignedTo || ''}
-                onValueChange={value => {
-                  if (value) assignRoute(item.id, value);
-                }}
-              >
-                <Picker.Item label="Assign to driver..." value="" />
-                {drivers.map(driver => (
-                  <Picker.Item key={driver} label={driver} value={driver} />
-                ))}
-              </Picker>
-            </View>
-          )}
-          contentContainerStyle={{ paddingBottom: 40 }}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: 30 }}
         />
       )}
     </View>
   );
-};
-
-export default AssignRoutesScreen;
+}
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  heading: { fontSize: 20, fontWeight: 'bold', marginBottom: 16 },
-  card: {
-    backgroundColor: '#f2f2f2',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
+  container: {
+    flex: 1,
+    backgroundColor: '#f9f9fb',
+    padding: 20,
   },
-  routeId: { fontSize: 16, fontWeight: '600' },
-  meta: { fontSize: 13, color: '#555', marginTop: 4 },
-  empty: {
-    marginTop: 100,
-    fontSize: 16,
-    textAlign: 'center',
-    color: '#888',
+  title: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#151717',
+    marginBottom: 16,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 14,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 3,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  routeName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#222',
+  },
+  packageCount: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  preview: {
+    marginTop: 6,
+  },
+  previewLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#444',
+    marginBottom: 4,
+  },
+  address: {
+    fontSize: 13,
+    color: '#555',
+    marginLeft: 8,
+    marginBottom: 2,
   },
 });

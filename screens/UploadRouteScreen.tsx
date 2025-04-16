@@ -10,38 +10,38 @@ import {
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { addDoc, collection, getDocs } from 'firebase/firestore';
+import { addDoc, collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { auth, db, storage } from '../firebaseconfig';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { TextInput } from 'react-native-gesture-handler';
-import { deleteDoc, doc } from 'firebase/firestore';
 import { deleteObject, ref as storageRef } from 'firebase/storage';
 
 const UploadRouteScreen = () => {
   const [uploading, setUploading] = useState(false);
   const [routes, setRoutes] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredRoutes, setFilteredRoutes] = useState<any[]>([]);
   const navigation = useNavigation<any>();
-const [searchQuery, setSearchQuery] = useState('');
-const [filteredRoutes, setFilteredRoutes] = useState<any[]>([]);
 
-const fetchRoutes = async () => {
-  const snap = await getDocs(collection(db, 'routes'));
-  const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  setRoutes(docs);
-  setFilteredRoutes(docs);
-};
-useEffect(() => {
-  const lower = searchQuery.toLowerCase();
-  const filtered = routes.filter(r =>
-    r.filename?.toLowerCase().includes(lower)
-  );
-  setFilteredRoutes(filtered);
-}, [searchQuery, routes]);
+  const fetchRoutes = async () => {
+    const snap = await getDocs(collection(db, 'routesFile')); // ✅ CHANGED to routesFile
+    const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    setRoutes(docs);
+    setFilteredRoutes(docs);
+  };
 
   useEffect(() => {
     fetchRoutes();
   }, []);
+
+  useEffect(() => {
+    const lower = searchQuery.toLowerCase();
+    const filtered = routes.filter(r =>
+      r.filename?.toLowerCase().includes(lower)
+    );
+    setFilteredRoutes(filtered);
+  }, [searchQuery, routes]);
 
   const handleUpload = async () => {
     try {
@@ -55,16 +55,16 @@ useEffect(() => {
       const blob = await fetch(file.uri).then(r => r.blob());
 
       const uid = auth.currentUser?.uid || 'anonymous';
-      const storageRef = ref(storage, `routes/${uid}/${file.name}`);
+      const storageRefInstance = ref(storage, `routes/${uid}/${file.name}`);
       setUploading(true);
-      await uploadBytes(storageRef, blob);
-      const url = await getDownloadURL(storageRef);
+      await uploadBytes(storageRefInstance, blob);
+      const url = await getDownloadURL(storageRefInstance);
 
-      await addDoc(collection(db, 'routes'), {
+      await addDoc(collection(db, 'routesFile'), {
         uid,
         filename: file.name,
         url,
-        size: file.size || 0, // 👈 Add this line
+        size: file.size || 0,
         uploadedAt: new Date().toISOString(),
       });
 
@@ -77,11 +77,7 @@ useEffect(() => {
       setUploading(false);
     }
   };
-  const formatFileSize = (bytes: number) => {
-    if (!bytes) return 'Unknown size';
-    const kb = bytes / 1024;
-    return kb > 1000 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
-  };
+
   const handleDelete = async (route: any) => {
     Alert.alert(
       'Delete PDF',
@@ -92,13 +88,9 @@ useEffect(() => {
           text: 'Delete',
           onPress: async () => {
             try {
-              // Delete from Firebase Storage
-              const fileRef = storageRef(storage, `routes/${route.uid}/${route.filename}`);
+              const fileRef = storageRef(storage, `routesFile/${route.uid}/${route.filename}`);
               await deleteObject(fileRef);
-  
-              // Delete from Firestore
-              await deleteDoc(doc(db, 'routes', route.id));
-  
+              await deleteDoc(doc(db, 'routesFile', route.id));
               Alert.alert('Deleted', 'Route successfully removed.');
               fetchRoutes();
             } catch (error) {
@@ -111,7 +103,12 @@ useEffect(() => {
       ]
     );
   };
-  
+
+  const formatFileSize = (bytes: number) => {
+    if (!bytes) return 'Unknown size';
+    const kb = bytes / 1024;
+    return kb > 1000 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
+  };
 
   const renderItem = ({ item }: any) => (
     <View style={styles.card}>
@@ -124,24 +121,22 @@ useEffect(() => {
           })
         }
       >
-    
-    <View style={styles.cardInner}>
-        <Ionicons name="document-text-outline" size={28} color="#444" />
-        <View style={styles.cardText}>
-          <Text style={styles.filename}>{item.filename}</Text>
-          <Text style={styles.meta}>
-  {formatFileSize(item.size)} • {new Date(item.uploadedAt).toLocaleDateString()}
-</Text>
-          
+        <View style={styles.cardInner}>
+          <Ionicons name="document-text-outline" size={28} color="#444" />
+          <View style={styles.cardText}>
+            <Text style={styles.filename}>{item.filename}</Text>
+            <Text style={styles.meta}>
+              {formatFileSize(item.size)} • {new Date(item.uploadedAt).toLocaleDateString()}
+            </Text>
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
 
-    <TouchableOpacity onPress={() => handleDelete(item)}>
-      <Ionicons name="trash-outline" size={22} color="#ff4d4d" />
-    </TouchableOpacity>
-  </View>
-);
+      <TouchableOpacity onPress={() => handleDelete(item)}>
+        <Ionicons name="trash-outline" size={22} color="#ff4d4d" />
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -163,21 +158,21 @@ useEffect(() => {
         <Text style={styles.empty}>No PDFs uploaded yet.</Text>
       ) : (
         <TextInput
-  style={styles.searchBar}
-  placeholder="Search PDFs..."
-  placeholderTextColor="#888"
-  value={searchQuery}
-  onChangeText={setSearchQuery}
-/>
+          style={styles.searchBar}
+          placeholder="Search PDFs..."
+          placeholderTextColor="#888"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
       )}
-<FlatList
-  data={filteredRoutes}
-  keyExtractor={item => item.id}
-  renderItem={renderItem}
-  style={{ marginTop: 10 }}
-  contentContainerStyle={{ paddingBottom: 40 }}
-/>
-      
+
+      <FlatList
+        data={filteredRoutes}
+        keyExtractor={item => item.id}
+        renderItem={renderItem}
+        style={{ marginTop: 10 }}
+        contentContainerStyle={{ paddingBottom: 40 }}
+      />
     </View>
   );
 };
@@ -190,20 +185,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     paddingHorizontal: 20,
     paddingTop: 60,
-  },
-  searchBar: {
-    backgroundColor: '#f2f2f2',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    fontSize: 14,
-    color: '#333',
-    marginTop: 16,
-  },
-  meta: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
   },
   title: {
     fontSize: 22,
@@ -230,6 +211,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
+  searchBar: {
+    backgroundColor: '#f2f2f2',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    fontSize: 14,
+    color: '#333',
+    marginTop: 16,
+  },
   card: {
     flexDirection: 'row',
     backgroundColor: '#f4f4f4',
@@ -239,7 +229,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  
+  cardInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
   cardText: {
     marginLeft: 12,
     flex: 1,
@@ -249,9 +243,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#222',
   },
-  date: {
+  meta: {
     fontSize: 12,
     color: '#666',
+    marginTop: 2,
   },
   empty: {
     marginTop: 40,
@@ -259,10 +254,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#888',
   },
-  cardInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  
 });

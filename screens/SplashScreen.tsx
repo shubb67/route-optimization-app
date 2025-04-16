@@ -34,8 +34,6 @@ const SplashScreen = () => {
         style={styles.logo}
         resizeMode="contain"
       />
-      <Text style={styles.appName}>SwiftRoute</Text>
-      <Text style={styles.tagline}>SMARTER PATHS. FASTER DELIVERIES.</Text>
     </View>
   );
 };
@@ -51,8 +49,8 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   logo: {
-    width: 140,
-    height: 140,
+    width: 210,
+    height: 210,
     marginBottom: 10,
   },
   appName: {

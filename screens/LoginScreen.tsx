@@ -48,7 +48,7 @@ const Login = () => {
       const { role } = userDoc.data();
       navigation.reset({
         index: 0,
-        routes: [{ name: role === 'Admin' ? 'AdminDashboard' : 'Map' }],
+        routes: [{ name: role === 'Admin' ? 'AdminDashboard' : 'DriverNavigator' }],
       });
     } catch (err: any) {
       Alert.alert('Login Failed', err.message);
